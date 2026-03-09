@@ -72,8 +72,10 @@ import android.view.View;
 import android.view.View.OnGenericMotionListener;
 import android.view.View.OnSystemUiVisibilityChangeListener;
 import android.view.View.OnTouchListener;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.TextView;
@@ -152,6 +154,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     private WifiManager.WifiLock highPerfWifiLock;
     private WifiManager.WifiLock lowLatencyWifiLock;
+
+    private CheckBox checkBox = null;
 
     private boolean connectedToUsbDriverService = false;
     private ServiceConnection usbDriverServiceConnection = new ServiceConnection() {
@@ -533,6 +537,36 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         // The connection will be started when the surface gets created
         streamView.getHolder().addCallback(this);
+
+        showGamePadModCheckBox();
+    }
+
+    public void showGamePadModCheckBox() {
+        // 创建 CheckBox
+        checkBox = new CheckBox(this);
+        checkBox.setText("🎮");
+        checkBox.setChecked(true);
+
+        // 设置布局参数
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.leftMargin = 80;   // Y坐标
+
+        checkBox.setLayoutParams(params);
+
+        // 添加到容器（例如 LinearLayout）
+        ((FrameLayout)streamView.getParent()).addView(checkBox);
+
+        // 设置选中状态变化监听
+        checkBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                // 选中时的逻辑
+            } else {
+                // 未选中时的逻辑
+            }
+        });
     }
 
     private void setPreferredOrientationForCurrentDisplay() {
@@ -2180,11 +2214,16 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouch(View view, MotionEvent event) {
+
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
             // Tell the OS not to buffer input events for us
             //
             // NB: This is still needed even when we call the newer requestUnbufferedDispatch()!
             view.requestUnbufferedDispatch(event);
+        }
+
+        if (checkBox.isChecked()) {
+            return false;
         }
 
         return handleMotionEvent(view, event);

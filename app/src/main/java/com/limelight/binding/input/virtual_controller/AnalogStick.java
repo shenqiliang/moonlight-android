@@ -179,6 +179,12 @@ public class AnalogStick extends VirtualControllerElement {
         _DBG("movement x: " + x + " movement y: " + y);
         // notify listeners
         for (AnalogStickListener listener : listeners) {
+            x = x * 3;
+            y = y * 3;
+            if (x > 1) x = 1;
+            if (x < -1) x = -1;
+            if (y > 1) y = 1;
+            if (y < -1) y = -1;
             listener.onMovement(x, y);
         }
     }
