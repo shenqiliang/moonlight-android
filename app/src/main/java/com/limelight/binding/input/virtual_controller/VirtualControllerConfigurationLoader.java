@@ -12,6 +12,7 @@ import android.util.DisplayMetrics;
 import com.limelight.nvstream.input.ControllerPacket;
 import com.limelight.preferences.PreferenceConfiguration;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -189,6 +190,18 @@ public class VirtualControllerConfigurationLoader {
     private static final int GUIDE_X = START_X-BACK_X;
     private static final int GUIDE_Y = START_BACK_Y;
 
+    // Default combo button position (below face buttons)
+    private static final int COMBO_BUTTON_X = 106;
+    private static final int COMBO_BUTTON_Y = 34;
+    private static final int COMBO_BUTTON_SIZE = 12;
+
+    private static ComboButton createComboButton(
+            final VirtualController controller,
+            final Context context) {
+        ComboButton comboButton = new ComboButton(controller, context);
+        return comboButton;
+    }
+
     public static void createDefaultLayout(final VirtualController controller, final Context context) {
 
         DisplayMetrics screen = context.getResources().getDisplayMetrics();
@@ -347,7 +360,93 @@ public class VirtualControllerConfigurationLoader {
             );
         }
 
+        // Load combo buttons from preferences
+        loadComboButtons(controller, context);
+
         controller.setOpacity(config.oscOpacity);
+    }
+
+    private static final String COMBO_BUTTONS_PREF = "COMBO_BUTTONS";
+
+    /**
+     * Save combo buttons configuration
+     */
+    private static void saveComboButtons(final VirtualController controller, final Context context) {
+        SharedPreferences.Editor prefEditor = context.getSharedPreferences(OSC_PREFERENCE, Activity.MODE_PRIVATE).edit();
+
+        JSONArray comboButtonsArray = new JSONArray();
+
+        for (VirtualControllerElement element : controller.getElements()) {
+            if (element instanceof ComboButton) {
+                try {
+                    JSONObject comboConfig = element.getConfiguration();
+                    comboConfig.put("ELEMENT_ID", element.elementId);
+                    comboButtonsArray.put(comboConfig);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        prefEditor.putString(COMBO_BUTTONS_PREF, comboButtonsArray.toString());
+        prefEditor.apply();
+    }
+
+    /**
+     * Load combo buttons from preferences
+     */
+    private static void loadComboButtons(final VirtualController controller, final Context context) {
+        SharedPreferences pref = context.getSharedPreferences(OSC_PREFERENCE, Activity.MODE_PRIVATE);
+        String comboButtonsJson = pref.getString(COMBO_BUTTONS_PREF, null);
+
+        if (comboButtonsJson != null) {
+            try {
+                JSONArray comboButtonsArray = new JSONArray(comboButtonsJson);
+                DisplayMetrics screen = context.getResources().getDisplayMetrics();
+                int rightDisplacement = screen.widthPixels - screen.heightPixels * 16 / 9;
+                int height = screen.heightPixels;
+
+                for (int i = 0; i < comboButtonsArray.length(); i++) {
+                    JSONObject comboConfig = comboButtonsArray.getJSONObject(i);
+                    ComboButton comboButton = createComboButton(controller, context);
+
+                    // Load position and size
+                    int left = comboConfig.optInt("LEFT", screenScale(COMBO_BUTTON_X, height) + rightDisplacement);
+                    int top = comboConfig.optInt("TOP", screenScale(COMBO_BUTTON_Y, height));
+                    int width = comboConfig.optInt("WIDTH", screenScale(COMBO_BUTTON_SIZE, height));
+                    int height_ = comboConfig.optInt("HEIGHT", screenScale(COMBO_BUTTON_SIZE, height));
+
+                    controller.addElement(comboButton, left, top, width, height_);
+
+                    // Load button configuration
+                    comboButton.loadConfiguration(comboConfig);
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * Add a new combo button to the controller
+     */
+    public static void addNewComboButton(final VirtualController controller, final Context context) {
+        DisplayMetrics screen = context.getResources().getDisplayMetrics();
+        int rightDisplacement = screen.widthPixels - screen.heightPixels * 16 / 9;
+        int height = screen.heightPixels;
+
+        ComboButton comboButton = createComboButton(controller, context);
+
+        // Add at default position
+        controller.addElement(comboButton,
+                screenScale(COMBO_BUTTON_X, height) + rightDisplacement,
+                screenScale(COMBO_BUTTON_Y, height),
+                screenScale(COMBO_BUTTON_SIZE, height),
+                screenScale(COMBO_BUTTON_SIZE, height)
+        );
+
+        // Show configuration dialog
+        comboButton.showComboConfigurationDialog();
     }
 
     public static void saveProfile(final VirtualController controller,
@@ -357,6 +456,10 @@ public class VirtualControllerConfigurationLoader {
         for (VirtualControllerElement element : controller.getElements()) {
             String prefKey = ""+element.elementId;
             try {
+                // Skip combo buttons as they are saved separately
+                if (element instanceof ComboButton) {
+                    continue;
+                }
                 prefEditor.putString(prefKey, element.getConfiguration().toString());
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -364,6 +467,9 @@ public class VirtualControllerConfigurationLoader {
         }
 
         prefEditor.apply();
+
+        // Save combo buttons separately
+        saveComboButtons(controller, context);
     }
 
     public static void loadFromPreferences(final VirtualController controller, final Context context) {

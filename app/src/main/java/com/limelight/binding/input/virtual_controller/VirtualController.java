@@ -4,7 +4,9 @@
 
 package com.limelight.binding.input.virtual_controller;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
@@ -93,6 +95,15 @@ public class VirtualController {
                 for (VirtualControllerElement element : elements) {
                     element.invalidate();
                 }
+            }
+        });
+
+        // Long press to show options menu (add combo button, etc.)
+        buttonConfigure.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                showConfigureOptionsMenu();
+                return true;
             }
         });
 
@@ -211,5 +222,71 @@ public class VirtualController {
         handler.postDelayed(delayedRetransmitRunnable, 25);
         handler.postDelayed(delayedRetransmitRunnable, 50);
         handler.postDelayed(delayedRetransmitRunnable, 75);
+    }
+
+    /**
+     * Show the configuration options menu
+     */
+    private void showConfigureOptionsMenu() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle("Virtual Controller Options");
+
+        CharSequence[] options = new CharSequence[]{
+                "Add Combo Button",
+                "Remove Last Combo Button",
+                "Cancel"
+        };
+
+        builder.setItems(options, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                switch (which) {
+                    case 0:
+                        // Add combo button
+                        VirtualControllerConfigurationLoader.addNewComboButton(VirtualController.this, context);
+                        Toast.makeText(context, "Combo button added", Toast.LENGTH_SHORT).show();
+                        break;
+                    case 1:
+                        // Remove last combo button
+                        removeLastComboButton();
+                        break;
+                    default:
+                        // Cancel
+                        break;
+                }
+            }
+        });
+
+        builder.show();
+    }
+
+    /**
+     * Remove the last added combo button
+     */
+    private void removeLastComboButton() {
+        ComboButton lastCombo = null;
+        for (int i = elements.size() - 1; i >= 0; i--) {
+            if (elements.get(i) instanceof ComboButton) {
+                lastCombo = (ComboButton) elements.get(i);
+                break;
+            }
+        }
+
+        if (lastCombo != null) {
+            elements.remove(lastCombo);
+            frame_layout.removeView(lastCombo);
+            VirtualControllerConfigurationLoader.saveProfile(this, context);
+            Toast.makeText(context, "Combo button removed", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(context, "No combo button to remove", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * Remove a specific element
+     */
+    public void removeElement(VirtualControllerElement element) {
+        elements.remove(element);
+        frame_layout.removeView(element);
     }
 }
