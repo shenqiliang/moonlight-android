@@ -155,6 +155,30 @@ public class VirtualControllerConfigurationLoader {
         return new RightAnalogStick(controller, context);
     }
 
+    private static DigitalButton createLsButton(
+            final int layer,
+            final String text,
+            final int icon,
+            final VirtualController controller,
+            final Context context) {
+        LsButton button = new LsButton(controller, layer, context);
+        button.setText(text);
+        button.setIcon(icon);
+        return button;
+    }
+
+    private static DigitalButton createRsButton(
+            final int layer,
+            final String text,
+            final int icon,
+            final VirtualController controller,
+            final Context context) {
+        RsButton button = new RsButton(controller, layer, context);
+        button.setText(text);
+        button.setIcon(icon);
+        return button;
+    }
+
 
     private static final int TRIGGER_L_BASE_X = 1;
     private static final int TRIGGER_R_BASE_X = 92;
@@ -185,6 +209,10 @@ public class VirtualControllerConfigurationLoader {
     private static final int START_BACK_Y = 64;
     private static final int START_BACK_WIDTH = 12;
     private static final int START_BACK_HEIGHT = 7;
+
+    // LS/RS buttons aligned with START/BACK
+    private static final int LS_X = 20;
+    private static final int RS_X = 97;
 
     // Make the Guide Menu be in the center of START and BACK menu
     private static final int GUIDE_X = START_X-BACK_X;
@@ -329,6 +357,24 @@ public class VirtualControllerConfigurationLoader {
                     screenScale(START_BACK_WIDTH, height),
                     screenScale(START_BACK_HEIGHT, height)
             );
+
+            // LS button (L3) aligned with START/BACK
+            controller.addElement(createLsButton(
+                    1, "LS", -1, controller, context),
+                    screenScale(LS_X, height),
+                    screenScale(START_BACK_Y, height),
+                    screenScale(START_BACK_WIDTH, height),
+                    screenScale(START_BACK_HEIGHT, height)
+            );
+
+            // RS button (R3) aligned with START/BACK
+            controller.addElement(createRsButton(
+                    1, "RS", -1, controller, context),
+                    screenScale(RS_X, height) + rightDisplacement,
+                    screenScale(START_BACK_Y, height),
+                    screenScale(START_BACK_WIDTH, height),
+                    screenScale(START_BACK_HEIGHT, height)
+            );
         }
         else {
             controller.addElement(createDigitalButton(
@@ -361,7 +407,8 @@ public class VirtualControllerConfigurationLoader {
         }
 
         // Load combo buttons from preferences
-        loadComboButtons(controller, context);
+        String profileId = ProfileManager.getActiveProfileId(context);
+        loadComboButtons(controller, context, profileId);
 
         controller.setOpacity(config.oscOpacity);
     }
@@ -371,8 +418,9 @@ public class VirtualControllerConfigurationLoader {
     /**
      * Save combo buttons configuration
      */
-    private static void saveComboButtons(final VirtualController controller, final Context context) {
-        SharedPreferences.Editor prefEditor = context.getSharedPreferences(OSC_PREFERENCE, Activity.MODE_PRIVATE).edit();
+    private static void saveComboButtons(final VirtualController controller, final Context context, final String profileId) {
+        SharedPreferences pref = context.getSharedPreferences(OSC_PREFERENCE, Activity.MODE_PRIVATE);
+        SharedPreferences.Editor prefEditor = pref.edit();
 
         JSONArray comboButtonsArray = new JSONArray();
 
@@ -388,16 +436,21 @@ public class VirtualControllerConfigurationLoader {
             }
         }
 
-        prefEditor.putString(COMBO_BUTTONS_PREF, comboButtonsArray.toString());
+        prefEditor.putString(ProfileManager.getProfileComboButtonsKey(profileId), comboButtonsArray.toString());
         prefEditor.apply();
     }
 
     /**
      * Load combo buttons from preferences
      */
-    private static void loadComboButtons(final VirtualController controller, final Context context) {
+    private static void loadComboButtons(final VirtualController controller, final Context context, final String profileId) {
         SharedPreferences pref = context.getSharedPreferences(OSC_PREFERENCE, Activity.MODE_PRIVATE);
-        String comboButtonsJson = pref.getString(COMBO_BUTTONS_PREF, null);
+        String comboButtonsJson = pref.getString(ProfileManager.getProfileComboButtonsKey(profileId), null);
+
+        // Fallback to legacy key for default profile
+        if (comboButtonsJson == null && profileId.equals("default")) {
+            comboButtonsJson = pref.getString(COMBO_BUTTONS_PREF, null);
+        }
 
         if (comboButtonsJson != null) {
             try {
@@ -451,15 +504,27 @@ public class VirtualControllerConfigurationLoader {
 
     public static void saveProfile(final VirtualController controller,
                                    final Context context) {
-        SharedPreferences.Editor prefEditor = context.getSharedPreferences(OSC_PREFERENCE, Activity.MODE_PRIVATE).edit();
+        String profileId = ProfileManager.getActiveProfileId(context);
+        saveProfileTo(controller, context, profileId);
+    }
+
+    /**
+     * Save profile to a specific profile ID
+     */
+    public static void saveProfileTo(final VirtualController controller,
+                                     final Context context,
+                                     final String profileId) {
+        SharedPreferences pref = context.getSharedPreferences(OSC_PREFERENCE, Activity.MODE_PRIVATE);
+        SharedPreferences.Editor prefEditor = pref.edit();
 
         for (VirtualControllerElement element : controller.getElements()) {
-            String prefKey = ""+element.elementId;
+            // Skip combo buttons as they are saved separately
+            if (element instanceof ComboButton) {
+                continue;
+            }
+            
+            String prefKey = ProfileManager.getProfileElementKey(profileId, element.elementId);
             try {
-                // Skip combo buttons as they are saved separately
-                if (element instanceof ComboButton) {
-                    continue;
-                }
                 prefEditor.putString(prefKey, element.getConfiguration().toString());
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -469,16 +534,31 @@ public class VirtualControllerConfigurationLoader {
         prefEditor.apply();
 
         // Save combo buttons separately
-        saveComboButtons(controller, context);
+        saveComboButtons(controller, context, profileId);
     }
 
     public static void loadFromPreferences(final VirtualController controller, final Context context) {
+        String profileId = ProfileManager.getActiveProfileId(context);
+        loadFromPreferences(controller, context, profileId);
+    }
+
+    /**
+     * Load from a specific profile ID
+     */
+    public static void loadFromPreferences(final VirtualController controller, 
+                                           final Context context,
+                                           final String profileId) {
         SharedPreferences pref = context.getSharedPreferences(OSC_PREFERENCE, Activity.MODE_PRIVATE);
 
         for (VirtualControllerElement element : controller.getElements()) {
-            String prefKey = ""+element.elementId;
+            String prefKey = ProfileManager.getProfileElementKey(profileId, element.elementId);
 
+            // Fallback to legacy key for default profile
             String jsonConfig = pref.getString(prefKey, null);
+            if (jsonConfig == null && profileId.equals("default")) {
+                jsonConfig = pref.getString("" + element.elementId, null);
+            }
+
             if (jsonConfig != null) {
                 try {
                     element.loadConfiguration(new JSONObject(jsonConfig));

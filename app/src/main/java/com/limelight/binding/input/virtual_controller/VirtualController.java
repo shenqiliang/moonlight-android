@@ -232,6 +232,7 @@ public class VirtualController {
         builder.setTitle("Virtual Controller Options");
 
         CharSequence[] options = new CharSequence[]{
+                "Layout Profiles",
                 "Add Combo Button",
                 "Remove Last Combo Button",
                 "Cancel"
@@ -242,11 +243,15 @@ public class VirtualController {
             public void onClick(DialogInterface dialog, int which) {
                 switch (which) {
                     case 0:
+                        // Layout profiles
+                        ProfileManager.showProfileManagerDialog(context, VirtualController.this);
+                        break;
+                    case 1:
                         // Add combo button
                         VirtualControllerConfigurationLoader.addNewComboButton(VirtualController.this, context);
                         Toast.makeText(context, "Combo button added", Toast.LENGTH_SHORT).show();
                         break;
-                    case 1:
+                    case 2:
                         // Remove last combo button
                         removeLastComboButton();
                         break;

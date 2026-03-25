@@ -31,11 +31,6 @@ public class AnalogStick extends VirtualControllerElement {
      */
     public static final int SIZE_RADIUS_DEADZONE = 90;
     /**
-     * time frame for a double click
-     */
-    public final static long timeoutDoubleClick = 350;
-
-    /**
      * touch down time until the deadzone is lifted to allow precise movements with the analog sticks
      */
     public final static long timeoutDeadzone = 150;
@@ -52,22 +47,6 @@ public class AnalogStick extends VirtualControllerElement {
          * @param y vertical position, value from -1.0 ... 0 .. 1.0
          */
         void onMovement(float x, float y);
-
-        /**
-         * onClick event will be fired on click on the analog stick
-         */
-        void onClick();
-
-        /**
-         * onDoubleClick event will be fired on a double click in a short time frame on the analog
-         * stick.
-         */
-        void onDoubleClick();
-
-        /**
-         * onRevoke event will be fired on unpress of the analog stick.
-         */
-        void onRevoke();
     }
 
     /**
@@ -77,14 +56,6 @@ public class AnalogStick extends VirtualControllerElement {
         NO_MOVEMENT,
         MOVED_IN_DEAD_ZONE,
         MOVED_ACTIVE
-    }
-
-    /**
-     * Click type states.
-     */
-    private enum CLICK_STATE {
-        SINGLE,
-        DOUBLE
     }
 
     /**
@@ -124,10 +95,9 @@ public class AnalogStick extends VirtualControllerElement {
     private final Paint paint = new Paint();
 
     private STICK_STATE stick_state = STICK_STATE.NO_MOVEMENT;
-    private CLICK_STATE click_state = CLICK_STATE.SINGLE;
 
     private List<AnalogStickListener> listeners = new ArrayList<>();
-    private long timeLastClick = 0;
+    private long timeTouchDown = 0;
 
     private static double getMovementRadius(float x, float y) {
         return Math.sqrt(x * x + y * y);
@@ -189,30 +159,6 @@ public class AnalogStick extends VirtualControllerElement {
         }
     }
 
-    private void notifyOnClick() {
-        _DBG("click");
-        // notify listeners
-        for (AnalogStickListener listener : listeners) {
-            listener.onClick();
-        }
-    }
-
-    private void notifyOnDoubleClick() {
-        _DBG("double click");
-        // notify listeners
-        for (AnalogStickListener listener : listeners) {
-            listener.onDoubleClick();
-        }
-    }
-
-    private void notifyOnRevoke() {
-        _DBG("revoke");
-        // notify listeners
-        for (AnalogStickListener listener : listeners) {
-            listener.onRevoke();
-        }
-    }
-
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         // calculate new radius sizes depending
@@ -232,11 +178,7 @@ public class AnalogStick extends VirtualControllerElement {
         paint.setStrokeWidth(getDefaultStrokeWidth());
 
         // draw outer circle
-        if (!isPressed() || click_state == CLICK_STATE.SINGLE) {
-            paint.setColor(getDefaultColor());
-        } else {
-            paint.setColor(pressedColor);
-        }
+        paint.setColor(isPressed() ? pressedColor : getDefaultColor());
         canvas.drawCircle(getWidth() / 2, getHeight() / 2, radius_complete, paint);
 
         paint.setColor(getDefaultColor());
@@ -276,7 +218,7 @@ public class AnalogStick extends VirtualControllerElement {
         // We also release the deadzone if the user keeps the stick pressed for a bit to allow
         // them to make precise movements.
         stick_state = (stick_state == STICK_STATE.MOVED_ACTIVE ||
-                eventTime - timeLastClick > timeoutDeadzone ||
+                eventTime - timeTouchDown > timeoutDeadzone ||
                 movement_radius > radius_dead_zone) ?
                 STICK_STATE.MOVED_ACTIVE : STICK_STATE.MOVED_IN_DEAD_ZONE;
 
@@ -288,9 +230,6 @@ public class AnalogStick extends VirtualControllerElement {
 
     @Override
     public boolean onElementTouchEvent(MotionEvent event) {
-        // save last click state
-        CLICK_STATE lastClickState = click_state;
-
         // get absolute way for each axis
         relative_x = -(getWidth() / 2 - event.getX());
         relative_y = -(getHeight() / 2 - event.getY());
@@ -314,17 +253,8 @@ public class AnalogStick extends VirtualControllerElement {
             case MotionEvent.ACTION_DOWN: {
                 // set to dead zoned, will be corrected in update position if necessary
                 stick_state = STICK_STATE.MOVED_IN_DEAD_ZONE;
-                // check for double click
-                if (lastClickState == CLICK_STATE.SINGLE &&
-                        event.getEventTime() - timeLastClick <= timeoutDoubleClick) {
-                    click_state = CLICK_STATE.DOUBLE;
-                    notifyOnDoubleClick();
-                } else {
-                    click_state = CLICK_STATE.SINGLE;
-                    notifyOnClick();
-                }
-                // reset last click timestamp
-                timeLastClick = event.getEventTime();
+                // save touch down timestamp for deadzone lifting
+                timeTouchDown = event.getEventTime();
                 // set item pressed and update
                 setPressed(true);
                 break;
@@ -342,7 +272,6 @@ public class AnalogStick extends VirtualControllerElement {
             updatePosition(event.getEventTime());
         } else {
             stick_state = STICK_STATE.NO_MOVEMENT;
-            notifyOnRevoke();
 
             // not longer pressed reset analog stick
             notifyOnMovement(0, 0);
